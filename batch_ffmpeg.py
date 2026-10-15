@@ -67,6 +67,8 @@ except (ImportError, ValueError) as error:  # pragma: no cover - environment che
     )
     raise SystemExit(2) from error
 
+GLib.set_prgname("batch_ffmpeg")
+
 PROGRESS_OPTION = "-progress"
 PROGRESS_VALUE = "pipe:1"
 STATS_PERIOD_OPTION = "-stats_period"
@@ -88,7 +90,7 @@ WINDOW_TITLE = "Batch ffmpeg"
 CANCEL_DIALOG_KEEP = "keep"
 CANCEL_DIALOG_CANCEL = "cancel"
 
-# Width of the column holding the "File" / "Batch" caption, wide enough for the
+# Width of the column holding the "File" / "Total" caption, wide enough for the
 # longest of them so that both bars start on the same x.
 CAPTION_WIDTH = 64
 
@@ -249,9 +251,9 @@ def render_progress(fraction, unknown=False):
     return render_bar(fraction), f"{math.floor(fraction * 100):3d}%"
 
 
-def format_line(index, total, name, batch_fraction, unknown=False):
-    """The terminal line: batch position, current file and the batch progress."""
-    bar, percent = render_progress(batch_fraction, unknown)
+def format_line(index, total, name, total_fraction, unknown=False):
+    """The terminal line: position in the batch, current file and total progress."""
+    bar, percent = render_progress(total_fraction, unknown)
     return f"[{index}/{total}] {name}  {bar} {percent}"
 
 
@@ -308,9 +310,9 @@ class BatchWindow(Adw.ApplicationWindow):
         self.position_label.add_css_class("dim-label")
 
         file_row, self.file_bar, self.file_percent = self._progress_row("File")
-        batch_row, self.batch_bar, self.batch_percent = self._progress_row("Batch")
+        total_row, self.total_bar, self.total_percent = self._progress_row("Total")
         self.file_detail = self._detail_label()
-        self.batch_detail = self._detail_label()
+        self.total_detail = self._detail_label()
 
         self.failure_title = Gtk.Label(xalign=0.0, wrap=True, label="")
         self.failure_command = Gtk.Label(
@@ -346,8 +348,8 @@ class BatchWindow(Adw.ApplicationWindow):
             self.position_label,
             file_row,
             self.file_detail,
-            batch_row,
-            self.batch_detail,
+            total_row,
+            self.total_detail,
             self.failure_revealer,
         ):
             content.append(widget)
@@ -405,8 +407,8 @@ class BatchWindow(Adw.ApplicationWindow):
             return
         self._set_bar(self.file_bar, self.file_percent, fraction)
 
-    def set_batch_fraction(self, fraction):
-        self._set_bar(self.batch_bar, self.batch_percent, fraction)
+    def set_total_fraction(self, fraction):
+        self._set_bar(self.total_bar, self.total_percent, fraction)
 
     def set_pulsing(self, pulsing):
         """A file with no known duration has no fraction to show: pulse the bar."""
@@ -651,12 +653,12 @@ class BatchRunner:
         """
         if unknown is None:
             unknown = self.duration_us is None
-        batch_fraction = (self.index + file_fraction) / self.total
+        total_fraction = (self.index + file_fraction) / self.total
         self.window.set_file_fraction(file_fraction)
-        self.window.set_batch_fraction(batch_fraction)
+        self.window.set_total_fraction(total_fraction)
         self.reporter.show(
             format_line(
-                self.index + 1, self.total, self.source.name, batch_fraction, unknown
+                self.index + 1, self.total, self.source.name, total_fraction, unknown
             )
         )
 
