@@ -88,6 +88,14 @@ WINDOW_TITLE = "Batch ffmpeg"
 CANCEL_DIALOG_KEEP = "keep"
 CANCEL_DIALOG_CANCEL = "cancel"
 
+# Width of the column holding the "File" / "Batch" caption, wide enough for the
+# longest of them so that both bars start on the same x.
+CAPTION_WIDTH = 64
+
+# Width of the column holding the percentage, wide enough for "100 %" so that the
+# bars keep the same length all along.
+PERCENT_WIDTH = 52
+
 # How often the process exit is re-checked once its output stream ended, and how
 # often an indeterminate bar is pulsed.
 EXIT_POLL_MS = 20
@@ -299,8 +307,8 @@ class BatchWindow(Adw.ApplicationWindow):
         self.position_label = Gtk.Label(xalign=0.0, label="starting")
         self.position_label.add_css_class("dim-label")
 
-        file_row, self.file_bar = self._progress_row("File")
-        batch_row, self.batch_bar = self._progress_row("Batch")
+        file_row, self.file_bar, self.file_percent = self._progress_row("File")
+        batch_row, self.batch_bar, self.batch_percent = self._progress_row("Batch")
         self.file_detail = self._detail_label()
         self.batch_detail = self._detail_label()
 
@@ -361,14 +369,20 @@ class BatchWindow(Adw.ApplicationWindow):
 
     @staticmethod
     def _progress_row(caption):
-        caption_label = Gtk.Label(label=caption, xalign=1.0)
-        caption_label.set_size_request(64, -1)
-        bar = Gtk.ProgressBar(show_text=True, hexpand=True, valign=Gtk.Align.CENTER)
-        bar.set_text("0 %")
+        """A caption, a bar and a percentage, all three on the bar's centre line."""
+        caption_label = Gtk.Label(label=caption, xalign=0.5, valign=Gtk.Align.CENTER)
+        caption_label.set_size_request(CAPTION_WIDTH, -1)
+
+        bar = Gtk.ProgressBar(show_text=False, hexpand=True, valign=Gtk.Align.CENTER)
+
+        percent_label = Gtk.Label(xalign=1.0, valign=Gtk.Align.CENTER, label="0 %")
+        percent_label.set_size_request(PERCENT_WIDTH, -1)
+
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         row.append(caption_label)
         row.append(bar)
-        return row, bar
+        row.append(percent_label)
+        return row, bar, percent_label
 
     @staticmethod
     def _detail_label():
@@ -389,22 +403,22 @@ class BatchWindow(Adw.ApplicationWindow):
         # fight a fraction update: leave the text at "?? %".
         if self._pulse_source:
             return
-        self._set_bar(self.file_bar, fraction)
+        self._set_bar(self.file_bar, self.file_percent, fraction)
 
     def set_batch_fraction(self, fraction):
-        self._set_bar(self.batch_bar, fraction)
+        self._set_bar(self.batch_bar, self.batch_percent, fraction)
 
     def set_pulsing(self, pulsing):
         """A file with no known duration has no fraction to show: pulse the bar."""
         if pulsing and not self._pulse_source:
-            self.file_bar.set_text("?? %")
+            self.file_percent.set_text("?? %")
             self.file_bar.pulse()
             self._pulse_source = GLib.timeout_add(PULSE_INTERVAL_MS, self._pulse)
         elif not pulsing and self._pulse_source:
             GLib.source_remove(self._pulse_source)
             self._pulse_source = 0
             self.file_bar.set_fraction(0.0)
-            self.file_bar.set_text("0 %")
+            self.file_percent.set_text("0 %")
 
     def show_failure(self, name, command, log):
         """Reveal the failure card. It is left up until another failure replaces it."""
@@ -436,10 +450,10 @@ class BatchWindow(Adw.ApplicationWindow):
     # -- internals
 
     @staticmethod
-    def _set_bar(bar, fraction):
+    def _set_bar(bar, percent_label, fraction):
         fraction = clamp_fraction(fraction)
         bar.set_fraction(fraction)
-        bar.set_text(f"{round(fraction * 100)} %")
+        percent_label.set_text(f"{round(fraction * 100)} %")
 
     def _pulse(self):
         self.file_bar.pulse()
